@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { fetchCourses, addCourse, updateCourse, deleteCourse } from '../services/courseService';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
 function Courses() {
   const [courses, setCourses] = useState([]);
@@ -8,6 +10,8 @@ function Courses() {
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState([]);
   const [currentCourse, setCurrentCourse] = useState(null);
   const [formData, setFormData] = useState({
     Programme: '',
@@ -15,6 +19,7 @@ function Courses() {
     Status: '',
   });
   const modalRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -35,6 +40,94 @@ function Courses() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const validateRow = (row) => {
+    const errors = [];
+    if (!row.Programme) errors.push('Missing Programme');
+    if (!row.Duration || isNaN(parseInt(row.Duration))) errors.push('Invalid Duration (must be a number)');
+    if (!['Active', 'Inactive'].includes(row.Status)) errors.push('Invalid Status (must be Active or Inactive)');
+    return { isValid: errors.length === 0, errors };
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const validatedData = jsonData.map((row, index) => {
+          const { isValid, errors } = validateRow(row);
+          return {
+            ...row,
+            Duration: parseInt(row.Duration) || row.Duration,
+            isValid,
+            errors,
+            rowIndex: index,
+          };
+        });
+        setImportData(validatedData);
+        setShowImportModal(true);
+      } catch (err) {
+        setError('Failed to parse Excel file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportConfirm = async () => {
+    try {
+      const validData = importData.filter((row) => row.isValid);
+      if (validData.length === 0) {
+        toast.error('No valid courses to import.', {
+          style: {
+            border: '1px solid #4f46e5',
+            padding: '16px',
+            color: '#4f46e5',
+            background: '#f0f7ff',
+          },
+          iconTheme: {
+            primary: '#4f46e5',
+            secondary: '#ffffff',
+          },
+        });
+        return;
+      }
+      for (const row of validData) {
+        const newCourse = await addCourse({
+          Programme: row.Programme,
+          Duration: row.Duration,
+          Status: row.Status,
+        });
+        setCourses((prev) => [...prev, newCourse]);
+      }
+      toast.success(`Successfully imported ${validData.length} course${validData.length > 1 ? 's' : ''}.`, {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff',
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff',
+        },
+      });
+      setShowImportModal(false);
+      setImportData([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      setError('Failed to import courses: ' + err.message);
+    }
+  };
+
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -48,6 +141,18 @@ function Courses() {
         Programme: '',
         Duration: '',
         Status: '',
+      });
+      toast.success('Course added successfully.', {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff',
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff',
+        },
       });
     } catch (err) {
       setError('Failed to add course: ' + err.message);
@@ -73,6 +178,18 @@ function Courses() {
         Duration: '',
         Status: '',
       });
+      toast.success('Course updated successfully.', {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff',
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff',
+        },
+      });
     } catch (err) {
       setError('Failed to update course: ' + err.message);
     }
@@ -93,6 +210,18 @@ function Courses() {
       try {
         await deleteCourse(courseId);
         setCourses(courses.filter((course) => course.$id !== courseId));
+        toast.success('Course deleted successfully.', {
+          style: {
+            border: '1px solid #4f46e5',
+            padding: '16px',
+            color: '#4f46e5',
+            background: '#f0f7ff',
+          },
+          iconTheme: {
+            primary: '#4f46e5',
+            secondary: '#ffffff',
+          },
+        });
       } catch (err) {
         setError('Failed to delete course: ' + err.message);
       }
@@ -109,26 +238,28 @@ function Courses() {
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Courses');
-    
-    // Customize column widths
     worksheet['!cols'] = [
       { wch: 30 }, // Programme
       { wch: 15 }, // Duration
       { wch: 15 }, // Status
     ];
-
     XLSX.writeFile(workbook, 'Courses.xlsx');
   };
 
   const closeModal = useCallback(() => {
     setShowAddForm(false);
     setShowEditForm(false);
+    setShowImportModal(false);
     setCurrentCourse(null);
+    setImportData([]);
     setFormData({
       Programme: '',
       Duration: '',
       Status: '',
     });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, []);
 
   const handleKeyDown = useCallback(
@@ -141,7 +272,7 @@ function Courses() {
   );
 
   useEffect(() => {
-    if (showAddForm || showEditForm) {
+    if (showAddForm || showEditForm || showImportModal) {
       document.addEventListener('keydown', handleKeyDown);
       if (modalRef.current) {
         modalRef.current.focus();
@@ -150,119 +281,279 @@ function Courses() {
       document.removeEventListener('keydown', handleKeyDown);
     }
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAddForm, showEditForm, handleKeyDown]);
+  }, [showAddForm, showEditForm, showImportModal, handleKeyDown]);
+
+  const modalVariants = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
+    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2, ease: 'easeIn' } },
+  };
+
+  const rowVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: (i) => ({
+      opacity: 1,
+      x: 0,
+      transition: { delay: i * 0.05, duration: 0.3, ease: 'easeOut' },
+    }),
+  };
+
+  const buttonVariants = {
+    hover: { scale: 1.05, transition: { duration: 0.2 } },
+    tap: { scale: 0.95 },
+  };
 
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-600"></div>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          className="w-12 h-12 border-4 border-t-indigo-600 border-gray-200 rounded-full"
+        ></motion.div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8 max-w-7xl mx-auto">
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-lg" role="alert">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="p-8 max-w-7xl mx-auto"
+      >
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-6 rounded-lg shadow-md">
           {error}
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
+      <Toaster position="top-right" />
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex justify-between items-center mb-8"
+        >
           <h2 className="text-3xl font-bold text-gray-900">Courses Management</h2>
           <div className="space-x-4">
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors duration-200"
+            <motion.label
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors cursor-pointer"
             >
-              Add New Course
-            </button>
-            <button
+              Import from Excel
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+                ref={fileInputRef}
+                className="hidden"
+              />
+            </motion.label>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
               onClick={handleExportToExcel}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors duration-200"
+              className="bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
             >
               Export to Excel
-            </button>
-          </div>
-        </div>
-
-        {(showAddForm || showEditForm) && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div
-              ref={modalRef}
-              tabIndex={-1}
-              className="bg-white p-8 rounded-2xl shadow-2xl max-w-lg w-full animate-fade-in"
+            </motion.button>
+            <motion.button
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={() => setShowAddForm(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
             >
-              <h3 className="text-2xl font-semibold text-gray-900 mb-6">
-                {showEditForm ? 'Edit Course' : 'Add Course'}
-              </h3>
-              <div onSubmit={showEditForm ? handleEditSubmit : handleAddSubmit}>
-                <div className="grid grid-cols-1 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Programme</label>
-                    <input
-                      type="text"
-                      name="Programme"
-                      value={formData.Programme}
-                      onChange={handleInputChange}
-                      className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      required
-                    />
+              Add New Course
+            </motion.button>
+          </div>
+        </motion.div>
+
+        <AnimatePresence>
+          {(showAddForm || showEditForm) && (
+            <motion.div
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            >
+              <div
+                ref={modalRef}
+                tabIndex={-1}
+                className="bg-white p-8 rounded-2xl shadow-2xl max-w-lg w-full"
+              >
+                <h3 className="text-2xl font-semibold text-gray-900 mb-6">
+                  {showEditForm ? 'Edit Course' : 'Add Course'}
+                </h3>
+                <form onSubmit={showEditForm ? handleEditSubmit : handleAddSubmit}>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Programme</label>
+                      <input
+                        type="text"
+                        name="Programme"
+                        value={formData.Programme}
+                        onChange={handleInputChange}
+                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Months)</label>
+                      <input
+                        type="number"
+                        name="Duration"
+                        value={formData.Duration}
+                        onChange={handleInputChange}
+                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        name="Status"
+                        value={formData.Status}
+                        onChange={handleInputChange}
+                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        required
+                      >
+                        <option value="">Select Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Months)</label>
-                    <input
-                      type="number"
-                      name="Duration"
-                      value={formData.Duration}
-                      onChange={handleInputChange}
-                      className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      min="1"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select
-                      name="Status"
-                      value={formData.Status}
-                      onChange={handleInputChange}
-                      className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      required
+                  <div className="mt-8 flex justify-end space-x-4">
+                    <motion.button
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      type="button"
+                      onClick={closeModal}
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 px-6 rounded-lg transition-colors"
                     >
-                      <option value="">Select Status</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      variants={buttonVariants}
+                      whileHover="hover"
+                      whileTap="tap"
+                      type="submit"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
+                    >
+                      {showEditForm ? 'Update Course' : 'Add Course'}
+                    </motion.button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+          {showImportModal && (
+            <motion.div
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            >
+              <div
+                ref={modalRef}
+                tabIndex={-1}
+                className="bg-white p-8 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              >
+                <h3 className="text-2xl font-semibold text-gray-900 mb-6">Preview Courses to Import</h3>
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Review the data below. Rows with issues are highlighted in red and list specific errors. Correct the Excel file and re-upload, or proceed to import only valid rows.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Programme</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Duration</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Status</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Validation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        <AnimatePresence>
+                          {importData.map((row, index) => (
+                            <motion.tr
+                              key={row.rowIndex}
+                              custom={index}
+                              variants={rowVariants}
+                              initial="hidden"
+                              animate="visible"
+                              exit="hidden"
+                              className={row.isValid ? 'bg-white' : 'bg-red-50'}
+                            >
+                              <td className="px-6 py-3 text-sm text-gray-600">{row.Programme || 'N/A'}</td>
+                              <td className="px-6 py-3 text-sm text-gray-600">{row.Duration || 'N/A'}</td>
+                              <td className="px-6 py-3 text-sm text-gray-600">{row.Status || 'N/A'}</td>
+                              <td className="px-6 py-3 text-sm text-gray-600">
+                                {row.isValid ? (
+                                  <span className="text-green-600">Valid</span>
+                                ) : (
+                                  <div className="text-red-600">
+                                    {row.errors.map((err, i) => (
+                                      <div key={i}>{err}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <div className="mt-8 flex justify-end space-x-4">
-                  <button
+                <div className="mt-6 flex justify-end space-x-4">
+                  <motion.button
+                    variants={buttonVariants}
+                    whileHover="hover"
+                    whileTap="tap"
                     type="button"
                     onClick={closeModal}
                     className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 px-6 rounded-lg transition-colors"
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={showEditForm ? handleEditSubmit : handleAddSubmit}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
+                  </motion.button>
+                  <motion.button
+                    variants={buttonVariants}
+                    whileHover="hover"
+                    whileTap="tap"
+                    onClick={handleImportConfirm}
+                    disabled={importData.every((row) => !row.isValid)}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
                   >
-                    {showEditForm ? 'Update Course' : 'Add Course'}
-                  </button>
+                    Confirm Import
+                  </motion.button>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="bg-white rounded-xl shadow-lg overflow-hidden"
+        >
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100">
               <tr>
@@ -273,30 +564,46 @@ function Courses() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {courses.map((course) => (
-                <tr key={course.$id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{course.Programme}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{course.Duration} Months</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{course.Status}</td>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(course)}
-                      className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(course.$id)}
-                      className="text-red-600 hover:text-red-800 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              <AnimatePresence>
+                {courses.map((course, index) => (
+                  <motion.tr
+                    key={course.$id}
+                    custom={index}
+                    variants={rowVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="hidden"
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{course.Programme}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{course.Duration} Months</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{course.Status}</td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      <motion.button
+                        variants={buttonVariants}
+                        whileHover="hover"
+                        whileTap="tap"
+                        onClick={() => handleEdit(course)}
+                        className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors"
+                      >
+                        Edit
+                      </motion.button>
+                      <motion.button
+                        variants={buttonVariants}
+                        whileHover="hover"
+                        whileTap="tap"
+                        onClick={() => handleDelete(course.$id)}
+                        className="text-red-600 hover:text-red-800 transition-colors"
+                      >
+                        Delete
+                      </motion.button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
             </tbody>
           </table>
-        </div>
+        </motion.div>
       </div>
 
       <style jsx>{`
