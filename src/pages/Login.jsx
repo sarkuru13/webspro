@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { login, getCurrentUser, logout } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,7 +7,26 @@ function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [checkedSession, setCheckedSession] = useState(false);
     const navigate = useNavigate();
+
+    // Check for existing session on component mount
+    useEffect(() => {
+        const checkSession = async () => {
+            try {
+                const user = await getCurrentUser();
+                if (user && (user.labels?.includes('admin') || user.prefs?.role === 'admin')) {
+                    navigate('/dashboard');
+                } else {
+                    setCheckedSession(true);
+                }
+            } catch (err) {
+                console.log('No active session found');
+                setCheckedSession(true);
+            }
+        };
+        checkSession();
+    }, [navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -27,6 +46,11 @@ function Login() {
             setIsLoading(false);
         }
     };
+
+    // Only render login form if session check is complete and no valid session was found
+    if (!checkedSession) {
+        return null; // Avoid rendering anything until session check is complete
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-white via-gray-100 to-gray-200 flex items-center justify-center px-4 py-12">
