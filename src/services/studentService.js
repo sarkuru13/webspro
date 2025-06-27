@@ -37,6 +37,16 @@ export async function getStudent(studentId) {
 
 export async function createStudent(studentData) {
   try {
+    // Check for duplicate ABC_ID
+    const existingStudents = await databases.listDocuments(
+      DATABASE_ID,
+      STUDENT_COLLECTION_ID,
+      [Query.equal('ABC_ID', parseInt(studentData.ABC_ID))]
+    );
+    if (existingStudents.total > 0) {
+      throw new Error('Student with this ABC ID already exists');
+    }
+
     const response = await databases.createDocument(
       DATABASE_ID,
       STUDENT_COLLECTION_ID,
@@ -44,23 +54,36 @@ export async function createStudent(studentData) {
       {
         Name: studentData.Name,
         Gender: studentData.Gender,
-        ABC_ID: studentData.ABC_ID,
+        ABC_ID: parseInt(studentData.ABC_ID),
         Status: studentData.Status,
         Course: studentData.Course || null,
-        Semester: studentData.Semester,
-        Batch: studentData.Batch,
-        Year: studentData.Year,
+        Semester: studentData.Semester ? parseInt(studentData.Semester) : null,
+        Batch: studentData.Batch ? parseInt(studentData.Batch) : null,
+        Year: studentData.Year || null,
         Address: studentData.Address || null
       }
     );
     return response;
   } catch (error) {
-    throw new Error('Failed to create student: ' + error.message);
+    throw new Error(error.message);
   }
 }
 
 export async function updateStudent(studentId, studentData) {
   try {
+    // Check for duplicate ABC_ID, excluding the current student
+    const existingStudents = await databases.listDocuments(
+      DATABASE_ID,
+      STUDENT_COLLECTION_ID,
+      [
+        Query.equal('ABC_ID', parseInt(studentData.ABC_ID)),
+        Query.notEqual('$id', studentId)
+      ]
+    );
+    if (existingStudents.total > 0) {
+      throw new Error('Another student with this ABC ID already exists');
+    }
+
     const response = await databases.updateDocument(
       DATABASE_ID,
       STUDENT_COLLECTION_ID,
@@ -68,18 +91,18 @@ export async function updateStudent(studentId, studentData) {
       {
         Name: studentData.Name,
         Gender: studentData.Gender,
-        ABC_ID: studentData.ABC_ID,
+        ABC_ID: parseInt(studentData.ABC_ID),
         Status: studentData.Status,
         Course: studentData.Course || null,
-        Semester: studentData.Semester,
-        Batch: studentData.Batch,
-        Year: studentData.Year,
+        Semester: studentData.Semester ? parseInt(studentData.Semester) : null,
+        Batch: studentData.Batch ? parseInt(studentData.Batch) : null,
+        Year: studentData.Year || null,
         Address: studentData.Address || null
       }
     );
     return response;
   } catch (error) {
-    throw new Error('Failed to update student: ' + error.message);
+    throw new Error(error.message);
   }
 }
 

@@ -1,4 +1,5 @@
 import { Client, Databases, Query, ID } from 'appwrite';
+import { getStudent } from './studentService';
 
 const client = new Client()
   .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
@@ -16,80 +17,65 @@ export async function getAttendance() {
       ATTENDANCE_COLLECTION_ID,
       [Query.orderDesc('$createdAt')]
     );
-    return response;
+    return response.documents;
   } catch (error) {
     throw new Error('Failed to fetch attendance records: ' + error.message);
   }
 }
 
-export async function getAttendanceRecord(attendanceId) {
-  try {
-    const response = await databases.getDocument(
-      DATABASE_ID,
-      ATTENDANCE_COLLECTION_ID,
-      attendanceId
-    );
-    return response;
-  } catch (error) {
-    throw new Error('Failed to fetch attendance record: ' + error.message);
-  }
-}
-
 export async function createAttendance(attendanceData) {
   try {
+    // Validate Student_Id exists
+    await getStudent(attendanceData.Student_Id); // Throws if student doesn't exist
     const response = await databases.createDocument(
       DATABASE_ID,
       ATTENDANCE_COLLECTION_ID,
       ID.unique(),
       {
-        Marked_at: attendanceData.Marked_at,
-        Status: attendanceData.Status,
         Student_Id: attendanceData.Student_Id,
-        Session_Id: attendanceData.Session_Id,
+        Status: attendanceData.Status,
         Course_Id: attendanceData.Course_Id,
         Marked_By: attendanceData.Marked_By,
+        Marked_at: attendanceData.Marked_at,
         Latitude: attendanceData.Latitude,
         Longitude: attendanceData.Longitude
       }
     );
     return response;
   } catch (error) {
-    throw new Error('Failed to create attendance record: ' + error.message);
+    throw new Error('Failed to create attendance: ' + error.message);
   }
 }
 
 export async function updateAttendance(attendanceId, attendanceData) {
   try {
+    // Validate Student_Id exists
+    await getStudent(attendanceData.Student_Id); // Throws if student doesn't exist
     const response = await databases.updateDocument(
       DATABASE_ID,
       ATTENDANCE_COLLECTION_ID,
       attendanceId,
       {
-        Marked_at: attendanceData.Marked_at,
-        Status: attendanceData.Status,
         Student_Id: attendanceData.Student_Id,
-        Session_Id: attendanceData.Session_Id,
+        Status: attendanceData.Status,
         Course_Id: attendanceData.Course_Id,
         Marked_By: attendanceData.Marked_By,
+        Marked_at: attendanceData.Marked_at,
         Latitude: attendanceData.Latitude,
         Longitude: attendanceData.Longitude
       }
     );
     return response;
   } catch (error) {
-    throw new Error('Failed to update attendance record: ' + error.message);
+    throw new Error('Failed to update attendance: ' + error.message);
   }
 }
 
 export async function deleteAttendance(attendanceId) {
   try {
-    await databases.deleteDocument(
-      DATABASE_ID,
-      ATTENDANCE_COLLECTION_ID,
-      attendanceId
-    );
+    await databases.deleteDocument(DATABASE_ID, ATTENDANCE_COLLECTION_ID, attendanceId);
     return true;
   } catch (error) {
-    throw new Error('Failed to delete attendance record: ' + error.message);
+    throw new Error('Failed to delete attendance: ' + error.message);
   }
 }

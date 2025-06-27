@@ -45,6 +45,15 @@ function Courses() {
     if (!row.Programme) errors.push('Missing Programme');
     if (!row.Duration || isNaN(parseInt(row.Duration))) errors.push('Invalid Duration (must be a number)');
     if (!['Active', 'Inactive'].includes(row.Status)) errors.push('Invalid Status (must be Active or Inactive)');
+
+    // Check if course already exists based on Programme and Duration only
+    const isDuplicate = courses.some(
+      (course) =>
+        course.Programme.toLowerCase() === row.Programme.toLowerCase() &&
+        parseInt(course.Duration) === parseInt(row.Duration)
+    );
+    if (isDuplicate) errors.push('Course Already Added');
+
     return { isValid: errors.length === 0, errors };
   };
 
@@ -130,6 +139,27 @@ function Courses() {
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    // Check for duplicates based on Programme and Duration
+    const isDuplicate = courses.some(
+      (course) =>
+        course.Programme.toLowerCase() === formData.Programme.toLowerCase() &&
+        parseInt(course.Duration) === parseInt(formData.Duration)
+    );
+    if (isDuplicate) {
+      toast.error('Course with this Programme and Duration already exists.', {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff',
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff',
+        },
+      });
+      return;
+    }
     try {
       const newCourse = await addCourse({
         ...formData,
@@ -305,7 +335,7 @@ function Courses() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
@@ -330,52 +360,125 @@ function Courses() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 sm:p-8">
       <Toaster position="top-right" />
       <div className="max-w-7xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex justify-between items-center mb-8"
-        >
-          <h2 className="text-3xl font-bold text-gray-900">Courses Management</h2>
-          <div className="space-x-4">
-            <motion.label
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors cursor-pointer"
-            >
-              Import from Excel
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                ref={fileInputRef}
-                className="hidden"
-              />
-            </motion.label>
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={handleExportToExcel}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
-            >
-              Export to Excel
-            </motion.button>
-            <motion.button
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={() => setShowAddForm(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
-            >
-              Add New Course
-            </motion.button>
+        {/* Sticky Header Section */}
+        <div className="sticky top-0 z-10 bg-gradient-to-br from-gray-50 to-gray-100 pt-6">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-6"
+          >
+            <h2 className="text-3xl font-bold text-gray-800 text-center bg-gradient-to-r from-indigo-600 to-indigo-400 text-transparent bg-clip-text">
+              Courses Management
+            </h2>
+            <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
+              <motion.label
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer"
+              >
+                Import from Excel
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                  ref={fileInputRef}
+                  className="hidden"
+                />
+              </motion.label>
+              <motion.button
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={handleExportToExcel}
+                className="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Export to Excel
+              </motion.button>
+              <motion.button
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => setShowAddForm(true)}
+                className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+              >
+                Add New Course
+              </motion.button>
+            </div>
+          </motion.div>
+
+          {/* Sticky Table Header */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="bg-white rounded-t-xl shadow-lg"
+          >
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-800 w-2/5">Programme</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-800 w-1/5">Duration</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-800 w-1/5">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-800 w-1/5">Actions</th>
+                </tr>
+              </thead>
+            </table>
+          </motion.div>
+        </div>
+
+        {/* Scrollable Table Body */}
+        <div className="bg-white rounded-b-xl shadow-lg overflow-x-auto">
+          <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200">
+                <AnimatePresence>
+                  {courses.map((course, index) => (
+                    <motion.tr
+                      key={course.$id}
+                      custom={index}
+                      variants={rowVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="hidden"
+                      className="hover:bg-indigo-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-indigo-600 hover:text-indigo-800 w-2/5">
+                        {course.Programme}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 w-1/5">{course.Duration} Months</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 w-1/5">{course.Status}</td>
+                      <td className="px-6 py-4 text-sm font-medium w-1/5">
+                        <motion.button
+                          variants={buttonVariants}
+                          whileHover="hover"
+                          whileTap="tap"
+                          onClick={() => handleEdit(course)}
+                          className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors"
+                        >
+                          Edit
+                        </motion.button>
+                        <motion.button
+                          variants={buttonVariants}
+                          whileHover="hover"
+                          whileTap="tap"
+                          onClick={() => handleDelete(course.$id)}
+                          className="text-red-600 hover:text-red-800 transition-colors"
+                        >
+                          Delete
+                        </motion.button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
           </div>
-        </motion.div>
+        </div>
 
         <AnimatePresence>
           {(showAddForm || showEditForm) && (
@@ -384,18 +487,18 @@ function Courses() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             >
               <div
                 ref={modalRef}
                 tabIndex={-1}
-                className="bg-white p-8 rounded-2xl shadow-2xl max-w-lg w-full"
+                className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
               >
-                <h3 className="text-2xl font-semibold text-gray-900 mb-6">
+                <h3 className="text-2xl font-semibold text-gray-800 mb-6">
                   {showEditForm ? 'Edit Course' : 'Add Course'}
                 </h3>
                 <form onSubmit={showEditForm ? handleEditSubmit : handleAddSubmit}>
-                  <div className="grid grid-cols-1 gap-6">
+                  <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Programme</label>
                       <input
@@ -403,7 +506,7 @@ function Courses() {
                         name="Programme"
                         value={formData.Programme}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300"
                         required
                       />
                     </div>
@@ -414,7 +517,7 @@ function Courses() {
                         name="Duration"
                         value={formData.Duration}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300"
                         min="1"
                         required
                       />
@@ -425,7 +528,7 @@ function Courses() {
                         name="Status"
                         value={formData.Status}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-300"
                         required
                       >
                         <option value="">Select Status</option>
@@ -434,14 +537,14 @@ function Courses() {
                       </select>
                     </div>
                   </div>
-                  <div className="mt-8 flex justify-end space-x-4">
+                  <div className="mt-6 flex justify-end gap-4">
                     <motion.button
                       variants={buttonVariants}
                       whileHover="hover"
                       whileTap="tap"
                       type="button"
                       onClick={closeModal}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 px-6 rounded-lg transition-colors"
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-lg transition-colors"
                     >
                       Cancel
                     </motion.button>
@@ -450,7 +553,7 @@ function Courses() {
                       whileHover="hover"
                       whileTap="tap"
                       type="submit"
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
+                      className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
                     >
                       {showEditForm ? 'Update Course' : 'Add Course'}
                     </motion.button>
@@ -466,14 +569,14 @@ function Courses() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             >
               <div
                 ref={modalRef}
                 tabIndex={-1}
-                className="bg-white p-8 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+                className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
               >
-                <h3 className="text-2xl font-semibold text-gray-900 mb-6">Preview Courses to Import</h3>
+                <h3 className="text-2xl font-semibold text-gray-800 mb-6">Preview Courses to Import</h3>
                 <div className="mb-6">
                   <p className="text-sm text-gray-600 mb-4">
                     Review the data below. Rows with issues are highlighted in red and list specific errors. Correct the Excel file and re-upload, or proceed to import only valid rows.
@@ -482,10 +585,10 @@ function Courses() {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Programme</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Duration</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Status</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Validation</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">Programme</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">Duration</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">Status</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-800">Validation</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -500,10 +603,10 @@ function Courses() {
                               exit="hidden"
                               className={row.isValid ? 'bg-white' : 'bg-red-50'}
                             >
-                              <td className="px-6 py-3 text-sm text-gray-600">{row.Programme || 'N/A'}</td>
-                              <td className="px-6 py-3 text-sm text-gray-600">{row.Duration || 'N/A'}</td>
-                              <td className="px-6 py-3 text-sm text-gray-600">{row.Status || 'N/A'}</td>
-                              <td className="px-6 py-3 text-sm text-gray-600">
+                              <td className="px-4 py-3 text-sm text-gray-600">{row.Programme || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{row.Duration || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{row.Status || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
                                 {row.isValid ? (
                                   <span className="text-green-600">Valid</span>
                                 ) : (
@@ -521,14 +624,14 @@ function Courses() {
                     </table>
                   </div>
                 </div>
-                <div className="mt-6 flex justify-end space-x-4">
+                <div className="mt-6 flex justify-end gap-4">
                   <motion.button
                     variants={buttonVariants}
                     whileHover="hover"
                     whileTap="tap"
                     type="button"
                     onClick={closeModal}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 px-6 rounded-lg transition-colors"
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-lg transition-colors"
                   >
                     Cancel
                   </motion.button>
@@ -538,7 +641,7 @@ function Courses() {
                     whileTap="tap"
                     onClick={handleImportConfirm}
                     disabled={importData.every((row) => !row.isValid)}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium py-2.5 px-6 rounded-lg transition-colors"
+                    className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 text-white font-medium py-2 px-6 rounded-lg transition-colors"
                   >
                     Confirm Import
                   </motion.button>
@@ -547,80 +650,7 @@ function Courses() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white rounded-xl shadow-lg overflow-hidden"
-        >
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Programme</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Duration</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              <AnimatePresence>
-                {courses.map((course, index) => (
-                  <motion.tr
-                    key={course.$id}
-                    custom={index}
-                    variants={rowVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="hidden"
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{course.Programme}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{course.Duration} Months</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{course.Status}</td>
-                    <td className="px-6 py-4 text-sm font-medium">
-                      <motion.button
-                        variants={buttonVariants}
-                        whileHover="hover"
-                        whileTap="tap"
-                        onClick={() => handleEdit(course)}
-                        className="text-indigo-600 hover:text-indigo-800 mr-4 transition-colors"
-                      >
-                        Edit
-                      </motion.button>
-                      <motion.button
-                        variants={buttonVariants}
-                        whileHover="hover"
-                        whileTap="tap"
-                        onClick={() => handleDelete(course.$id)}
-                        className="text-red-600 hover:text-red-800 transition-colors"
-                      >
-                        Delete
-                      </motion.button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </tbody>
-          </table>
-        </motion.div>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out forwards;
-        }
-      `}</style>
     </div>
   );
 }

@@ -17,6 +17,8 @@ function Students() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateError, setDuplicateError] = useState('');
   const [importData, setImportData] = useState([]);
   const [currentStudent, setCurrentStudent] = useState(null);
   const [courseFilter, setCourseFilter] = useState('');
@@ -67,7 +69,7 @@ function Students() {
       const courseB = b.Course?.Programme || '';
       return sortOrder === 'asc'
         ? courseA.localeCompare(courseB)
-        : courseB.localeCompare(courseA);
+        : courseB.localeCompare(courseB);
     });
     setFilteredStudents(updatedStudents);
   }, [students, courseFilter, sortOrder]);
@@ -121,6 +123,11 @@ function Students() {
     if (row.Year && !['First', 'Second', 'Third', 'Fourth', 'Fifth'].includes(row.Year)) {
       errors.push('Invalid Year (must be First, Second, Third, Fourth, or Fifth)');
     }
+    // Check for duplicate ABC ID
+    const isDuplicate = students.some(
+      student => parseInt(student.ABC_ID) === parseInt(row['ABC ID'])
+    );
+    if (isDuplicate) errors.push('Duplicate ABC ID');
     return { isValid: errors.length === 0, errors };
   };
 
@@ -137,7 +144,6 @@ function Students() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        // Validate and prepare data
         const validatedData = jsonData.map((row, index) => {
           const { isValid, errors } = validateRow(row);
           const course = courses.find(c => c.Programme === row.Course);
@@ -169,7 +175,7 @@ function Students() {
         return;
       }
       for (const row of validData) {
-        await createStudent({
+        const newStudent = await createStudent({
           Name: row.Name,
           Gender: row.Gender,
           ABC_ID: row.ABC_ID,
@@ -180,8 +186,8 @@ function Students() {
           Year: row.Year || null,
           Address: row.Address || null
         });
+        setStudents(prev => [...prev, newStudent]);
       }
-      setStudents([...students, ...validData]);
       toast.success(`Successfully imported ${validData.length} student${validData.length > 1 ? 's' : ''}.`, {
         style: {
           border: '1px solid #4f46e5',
@@ -210,8 +216,11 @@ function Students() {
       const newStudent = await createStudent({
         ...formData,
         ABC_ID: parseInt(formData.ABC_ID),
-        Semester: parseInt(formData.Semester),
-        Batch: parseInt(formData.Batch),
+        Semester: parseInt(formData.Semester) || null,
+        Batch: parseInt(formData.Batch) || null,
+        Course: formData.Course || null,
+        Year: formData.Year || null,
+        Address: formData.Address || null
       });
       setStudents([...students, newStudent]);
       setShowAddForm(false);
@@ -226,8 +235,25 @@ function Students() {
         Year: '',
         Address: ''
       });
+      toast.success('Student added successfully.', {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff'
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff'
+        }
+      });
     } catch (err) {
-      setError('Failed to add student: ' + err.message);
+      if (err.message.includes('Student with this ABC ID already exists')) {
+        setDuplicateError('Student with this ABC ID already exists.');
+        setShowDuplicateModal(true);
+      } else {
+        setError('Failed to add student: ' + err.message);
+      }
     }
   };
 
@@ -237,8 +263,11 @@ function Students() {
       const updatedStudent = await updateStudent(currentStudent.$id, {
         ...formData,
         ABC_ID: parseInt(formData.ABC_ID),
-        Semester: parseInt(formData.Semester),
-        Batch: parseInt(formData.Batch),
+        Semester: parseInt(formData.Semester) || null,
+        Batch: parseInt(formData.Batch) || null,
+        Course: formData.Course || null,
+        Year: formData.Year || null,
+        Address: formData.Address || null
       });
       setStudents(
         students.map((student) =>
@@ -258,8 +287,25 @@ function Students() {
         Year: '',
         Address: ''
       });
+      toast.success('Student updated successfully.', {
+        style: {
+          border: '1px solid #4f46e5',
+          padding: '16px',
+          color: '#4f46e5',
+          background: '#f0f7ff'
+        },
+        iconTheme: {
+          primary: '#4f46e5',
+          secondary: '#ffffff'
+        }
+      });
     } catch (err) {
-      setError('Failed to update student: ' + err.message);
+      if (err.message.includes('Another student with this ABC ID already exists')) {
+        setDuplicateError('Another student with this ABC ID already exists.');
+        setShowDuplicateModal(true);
+      } else {
+        setError('Failed to update student: ' + err.message);
+      }
     }
   };
 
@@ -290,6 +336,18 @@ function Students() {
       try {
         await deleteStudent(studentId);
         setStudents(students.filter((student) => student.$id !== studentId));
+        toast.success('Student deleted successfully.', {
+          style: {
+            border: '1px solid #4f46e5',
+            padding: '16px',
+            color: '#4f46e5',
+            background: '#f0f7ff'
+          },
+          iconTheme: {
+            primary: '#4f46e5',
+            secondary: '#ffffff'
+          }
+        });
       } catch (err) {
         setError('Failed to delete student: ' + err.message);
       }
@@ -301,6 +359,8 @@ function Students() {
     setShowEditForm(false);
     setShowDetailsModal(false);
     setShowImportModal(false);
+    setShowDuplicateModal(false);
+    setDuplicateError('');
     setCurrentStudent(null);
     setImportData([]);
     setFormData({
@@ -329,7 +389,7 @@ function Students() {
   );
 
   useEffect(() => {
-    if (showAddForm || showEditForm || showDetailsModal || showImportModal) {
+    if (showAddForm || showEditForm || showDetailsModal || showImportModal || showDuplicateModal) {
       document.addEventListener('keydown', handleKeyDown);
       if (modalRef.current) {
         modalRef.current.focus();
@@ -338,9 +398,8 @@ function Students() {
       document.removeEventListener('keydown', handleKeyDown);
     }
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAddForm, showEditForm, showDetailsModal, showImportModal, handleKeyDown]);
+  }, [showAddForm, showEditForm, showDetailsModal, showImportModal, showDuplicateModal, handleKeyDown]);
 
-  // Animation variants
   const modalVariants = {
     hidden: { opacity: 0, scale: 0.95 },
     visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
@@ -878,6 +937,36 @@ function Students() {
                     className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 text-white font-medium py-2 px-6 rounded-lg transition-colors"
                   >
                     Confirm Import
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {showDuplicateModal && (
+            <motion.div
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            >
+              <div
+                ref={modalRef}
+                tabIndex={-1}
+                className="bg-white p-6 sm:p-8 rounded-2xl shadow-xl max-w-lg w-full"
+              >
+                <h3 className="text-2xl font-semibold text-gray-800 mb-4">Duplicate Student</h3>
+                <p className="text-sm text-red-600 mb-6">{duplicateError}</p>
+                <div className="flex justify-end">
+                  <motion.button
+                    variants={buttonVariants}
+                    whileHover="hover"
+                    whileTap="tap"
+                    onClick={closeModal}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+                  >
+                    OK
                   </motion.button>
                 </div>
               </div>
